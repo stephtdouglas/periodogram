@@ -69,6 +69,9 @@ class acf(PeriodicModeler):
 
         peaks, lphs, hts = self.acorr_peaks(smooth=smooth, maxlag=maxlag,
                                             lookahead=lookahead, return_heights=True)
+        logging.debug(peaks)
+        logging.debug(lphs)
+        logging.debug(hts)
 
         if lphs[0] >= lphs[1]:
             firstpeak = peaks[0]
