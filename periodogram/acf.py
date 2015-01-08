@@ -14,7 +14,10 @@ import logging
 
 import acor
 
+from .findpeaks import peakdetect
 from .base import PeriodicModeler
+
+
 
 class acf(PeriodicModeler):
     """
@@ -34,7 +37,7 @@ class acf(PeriodicModeler):
 
         # Set cadence (use astropy.units)
         self.cadence = 0.02043423 #d #PLACEHOLDER
-        self.default_maxlag = 200//self.cadence
+        self.default_maxlag = 50//self.cadence
 
         #set private variables for cached acorr calculation
         self._lag = None  #always should be in cadences
@@ -48,6 +51,7 @@ class acf(PeriodicModeler):
 
         mask = np.isnan(self.y)
         self.mask = mask
+        self.y = self.y[~self.mask]
 
     def predict(self, t, filts=None, period=None):
         """Predict the best-fit model at t for the given period"""
@@ -55,57 +59,14 @@ class acf(PeriodicModeler):
 
     def score(self, period):
         """Compute the score for a period or array of periods"""
-        raise NotImplementedError()
-
-    def period_search(self):
-        """Find the best period for the model"""
-        # TODO: implement using the score() function provided by subclasses  ############
-
-    def acorr(self, maxlag=None, recalc=False, **kwargs):
-
-        smooth = kwargs.get("smooth",18)
-
-        if maxlag is None: 
-            maxlag = self.default_maxlag
-
-        
-        if self._ac is not None and not recalc:
-            lag = self._lag
-            ac = self._ac
-        else:
-            x = self.f.copy()
-            x[self.mask] = 0
-
-            #logging.debug('{} nans in x'.format((np.isnan(x)).sum()))
-
-            ac = acor.function(x, maxlag)
-            lag = np.arange(maxlag)
-
-            #smooth AC function
-            ac = gaussian_filter(ac, smooth)
-
-            #set private variables for cached calculation
-            self._ac = ac
-            self._lag = lag
-            self._maxlag = maxlag
-            self._smooth = smooth
-
-        if days:
-            return lag*CADENCE,ac
-        else:
-            return lag,ac
-
-    def acorr_peaks(self, lookahead=5, days=True, 
-                    return_heights=False, **kwargs):
-        days = kwargs.get("days",True)
-        lag, ac = self.acorr(days=days, **kwargs)
-        return peaks_and_lphs(ac, lag, return_heights=return_heights,
-                              lookahead=lookahead)
         
 
-    def acorr_period_fit(self, period=None, fit_npeaks=4,
+    def period_search(self, period=None, fit_npeaks=4,
                    smooth=18, maxlag=None, lookahead=5,
                    tol=0.2, return_peaks=False):
+        """Find the best period for the model"""
+        # This was acorr_period_fit
+
         peaks, lphs, hts = self.acorr_peaks(smooth=smooth, maxlag=maxlag,
                                             lookahead=lookahead, return_heights=True)
 
@@ -173,6 +134,52 @@ class acf(PeriodicModeler):
             return fit[0],cov[0][0]
 
 
+        # TODO: implement using the score() function provided by subclasses  ############
+
+        
+
+    def acorr(self, maxlag=None, recalc=False, **kwargs):
+
+        smooth = kwargs.get("smooth",18)
+        days = kwargs.get("days",True)
+
+        if maxlag is None: 
+            maxlag = self.default_maxlag
+
+        
+        if self._ac is not None and not recalc:
+            lag = self._lag
+            ac = self._ac
+        else:
+            x = self.y.copy()
+            x[self.mask] = 0
+
+            #logging.debug('{} nans in x'.format((np.isnan(x)).sum()))
+
+            ac = acor.function(x, maxlag)
+            lag = np.arange(maxlag)
+
+            #smooth AC function
+            ac = gaussian_filter(ac, smooth)
+
+            #set private variables for cached calculation
+            self._ac = ac
+            self._lag = lag
+            self._maxlag = maxlag
+            self._smooth = smooth
+
+        if days:
+            return lag*self.cadence,ac
+        else:
+            return lag,ac
+
+    def acorr_peaks(self, lookahead=5, days=True, 
+                    return_heights=False, **kwargs):
+        lag, ac = self.acorr(**kwargs)
+        return peaks_and_lphs(ac, lag, return_heights=return_heights,
+                              lookahead=lookahead)
+        
+
 
 def peaks_and_lphs(y, x=None, lookahead=5, return_heights=False):
     """Returns locations of peaks and corresponding "local peak heights"
@@ -198,37 +205,3 @@ def peaks_and_lphs(y, x=None, lookahead=5, return_heights=False):
     else:
         return maxes[:,0], lphs 
 
-    
-
-def acorr_peaks(fs, mask=None, lookahead=5, smooth=18, maxlag=200//CADENCE,
-                return_acorr=False, days=True):
-    """Returns positions of acorr peaks, with corresponding local heights.
-    """
-    fs = np.atleast_1d(fs)
-    if mask is None:
-        mask = self.mask
-    fs[mask] = 0
-    
-    corr = acor.function(fs,maxlag)
-    lag = np.arange(maxlag)
-
-    logging.debug('ac: {}'.format(corr))
-
-    #lag, corr = acorr(fs, mask=mask, maxlag=maxlag)
-    maxes, mins = peakdetect(corr, lag, lookahead=lookahead)
-    maxes = np.array(maxes)
-    mins = np.array(mins)
-
-    logging.debug('maxes: {}'.format(maxes))
-
-    #calculate "local heights".  First will always be a minimum.
-    try: #this if maxes and mins are same length 
-        lphs = np.concatenate([((maxes[:-1,1] - mins[:-1,1]) + (maxes[:-1,1] - mins[1:,1]))/2.,
-                             np.array([maxes[-1,1]-mins[-1,1]])])
-    except ValueError: #this if mins have one more
-        lphs = ((maxes[:,1] - mins[:-1,1]) + (maxes[:,1] - mins[1:,1]))/2.
-
-    if return_acorr:
-        return corr, maxes[:-1,0], lphs[:-1] #leaving off the last one, just in case weirdness...
-    else:
-        return maxes[:-1,0], lphs[:-1] #leaving off the last one, just in case weirdness...
