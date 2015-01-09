@@ -73,12 +73,14 @@ class acf(PeriodicModeler):
         logging.debug(lphs)
         logging.debug(hts)
 
-        if lphs[0] >= lphs[1]:
-            firstpeak = peaks[0]
-        else:
-            firstpeak = peaks[1]
-            if lphs[1] < 1.2*lphs[0]:
-                logging.warning('Second peak (selected) less than 1.2x height of first peak.')        
+        firstpeak = peaks[0]
+### This is having trouble with the test cases (second peak is only 0.01 higher, but it's not the input
+#        if lphs[0] >= lphs[1]:
+#            firstpeak = peaks[0]
+#        else:
+#            firstpeak = peaks[1]
+#            if lphs[1] < 1.2*lphs[0]:
+#                logging.warning('Second peak (selected) less than 1.2x height of first peak.')
 
         if period is None:
             period = firstpeak
