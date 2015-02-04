@@ -19,7 +19,7 @@ from .base import PeriodicModeler
 
 
 
-class acf(PeriodicModeler):
+class ACF(PeriodicModeler):
     """
     Autocorrelation Function for periodic modeling
 
@@ -37,7 +37,7 @@ class acf(PeriodicModeler):
 
         # Set cadence (use astropy.units)
         self.cadence = 0.02043423 #d #PLACEHOLDER
-        self.default_maxlag = 50//self.cadence
+        self.default_maxlag = int(50//self.cadence)
 
         #set private variables for cached acorr calculation
         self._lag = None  #always should be in cadences
@@ -65,8 +65,9 @@ class acf(PeriodicModeler):
                    smooth=18, maxlag=None, lookahead=5,
                    tol=0.2, return_peaks=False):
         """Find the best period for the model"""
-        # This was acorr_period_fit
+        # This function used to be acorr_period_fit
 
+        # get all peak locations, their "local peak heights", and absolute heights
         peaks, lphs, hts = self.acorr_peaks(smooth=smooth, maxlag=maxlag,
                                             lookahead=lookahead, return_heights=True)
         logging.debug(peaks)
@@ -89,7 +90,7 @@ class acf(PeriodicModeler):
             fit_npeaks = len(peaks)
         #peaks = peaks[:fit_npeaks]
 
-        #identify peaks to use in fit: first 'fit_npeaks' peaks closest to integer
+        # identify peaks to use in fit: first 'fit_npeaks' peaks closest to integer
         # multiples of period guess
 
         fit_peaks = []
@@ -119,8 +120,14 @@ class acf(PeriodicModeler):
 
         logging.debug('fitting peaks: {}'.format(fit_peaks))
 
+        # if there are < 3 peaks, just return the selected peak and all peaks as they are
         if fit_npeaks < 3:
-            return peaks,-1, fit_peaks, fit_lphs, fit_hts
+            if return_peaks:
+                return peaks,-1, fit_peaks, fit_lphs, fit_hts
+            else:
+                return peaks,-1
+
+        # If there are >3 peaks...do the next bit
 
 
         x = np.arange(fit_npeaks + 1)
@@ -144,6 +151,18 @@ class acf(PeriodicModeler):
         
 
     def acorr(self, maxlag=None, recalc=False, **kwargs):
+        """
+        calculates and returns the ACF and the lag array
+        the lag array is returned in integer lag units unless days==True
+
+        kwargs
+        ------
+        smooth: integer (default = 18)
+             width of the smoothing kernel
+
+        days: bool (default = True)
+             whether to return the lag array converted to days
+        """
 
         smooth = kwargs.get("smooth",18)
         days = kwargs.get("days",True)
@@ -181,6 +200,7 @@ class acf(PeriodicModeler):
     def acorr_peaks(self, lookahead=5, days=True, 
                     return_heights=False, **kwargs):
         lag, ac = self.acorr(**kwargs)
+        # get peaks and "local peak heights"
         return peaks_and_lphs(ac, lag, return_heights=return_heights,
                               lookahead=lookahead)
         
